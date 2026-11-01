@@ -1,21 +1,33 @@
-<p align="center"><img src="Resources/AppIcon.png" width="128" alt="LidOn icon"></p>
+<!-- readme-v2 -->
+<p align="center"><img src=".github/banner.svg" alt="LidOn" width="100%"></p>
+
+<p align="center"><a href="https://github.com/jayden0903/LidOn/releases/latest"><img src="https://img.shields.io/github/v/release/jayden0903/LidOn?style=flat-square&color=14a0b4" alt="Release"></a> <img src="https://img.shields.io/badge/macOS-14+-111827?style=flat-square&logo=apple&logoColor=white" alt="macOS"> <img src="https://img.shields.io/badge/license-MIT-111827?style=flat-square" alt="license"> <a href="README.ko.md"><img src="https://img.shields.io/badge/README-한국어-111827?style=flat-square" alt="README"></a></p>
+
+<p align="center">A free menu bar app that keeps your MacBook — and your AI coding agents — running with the lid closed.<br>No external display, no charger, no <code>sudo</code> each time.</p>
+
+<table>
+<tr><td align="center" width="25%"><h3>Lid closed</h3><sub>builds and agents keep running</sub></td><td align="center" width="25%"><h3>Auto</h3><sub>sleeps again when the work is done</sub></td><td align="center" width="25%"><h3>Agents</h3><sub>Claude Code · Codex · Cursor</sub></td><td align="center" width="25%"><h3>Free</h3><sub>open source, MIT</sub></td></tr>
+</table>
+
+<p align="center"><img src="docs/media/demo.gif" width="640" alt="LidOn demo"></p>
+
+### Install
+
+```bash
+brew install --cask jayden0903/tap/lidon
+```
+
+### Docs
+
+<details>
+<summary><b>Overview</b></summary>
 
 <h1 align="center">LidOn</h1>
 
-<p align="center"><b>Close the lid. Keep working.</b><br>
-A free, open-source macOS menu bar app that keeps your MacBook — and your AI coding agents — running with the lid closed.<br>
-No external display, no charger, no <code>sudo</code>.</p>
+</details>
 
-<p align="center">
-  <a href="https://github.com/jayden0903/LidOn/releases/latest"><img src="https://img.shields.io/github/v/release/jayden0903/LidOn?color=14a0b4" alt="Release"></a>
-  <img src="https://img.shields.io/badge/macOS-14%2B-555" alt="macOS 14+">
-  <img src="https://img.shields.io/badge/license-MIT-555" alt="MIT">
-  <a href="README.ko.md"><img src="https://img.shields.io/badge/README-한국어-555" alt="한국어"></a>
-</p>
-
-<p align="center"><img src="docs/media/demo.gif" width="640" alt="Close the lid — LidOn keeps the Mac running"></p>
-
-## Why
+<details>
+<summary><b>Why</b></summary>
 
 You start a long build, a test suite, a download — or you hand a task to Claude Code or Codex — and then you need to
 close the lid and walk away. A MacBook goes to sleep and everything stops. `caffeinate` doesn't help once the lid closes,
@@ -23,7 +35,10 @@ and `pmset disablesleep` needs `sudo` and stays on until you remember to turn it
 
 LidOn keeps the Mac running only while there's a reason to, and lets it sleep again as soon as that reason is gone.
 
-## Install
+</details>
+
+<details>
+<summary><b>Install</b></summary>
 
 ```bash
 brew install --cask jayden0903/tap/lidon
@@ -42,7 +57,10 @@ so the first time, open **System Settings → Privacy & Security** and click **O
 
 Requires macOS 14 Sonoma or later on a MacBook (Apple silicon or Intel).
 
-## Three ways to keep it running
+</details>
+
+<details>
+<summary><b>Three ways to keep it running</b></summary>
 
 | | How | Ends when |
 |---|---|---|
@@ -61,7 +79,10 @@ Pressing another key, clicking or scrolling while the Fn gesture is active cance
   <img src="docs/screenshots/overlay-countdown.jpg" width="440" alt="Fn gesture countdown">
 </p>
 
-## AI agents
+</details>
+
+<details>
+<summary><b>AI agents</b></summary>
 
 LidOn doesn't guess whether an agent is busy. Agents ask for it themselves through an MCP server that ships with the app:
 
@@ -93,7 +114,10 @@ lidon setup --print    # print the config snippets instead
 
 Any other MCP client: register `lidon mcp` as a stdio server. Agents without MCP: paste `lidon agent-docs` into your `CLAUDE.md` or `AGENTS.md`.
 
-## Terminal
+</details>
+
+<details>
+<summary><b>Terminal</b></summary>
 
 ```bash
 lidon run -- npm test                        # awake only while the command runs
@@ -108,20 +132,29 @@ lidon status [--json]
 
 URL scheme: `open "lidon://on?for=90m"`, `lidon://off`, `lidon://toggle` — handy from Shortcuts or Raycast.
 
-## Phone notifications
+</details>
+
+<details>
+<summary><b>Phone notifications</b></summary>
 
 *Settings → Notifications* supports [ntfy](https://ntfy.sh), Slack, Discord and a generic JSON webhook.
 You'll hear about it when an agent calls `notify`, and right before the closed Mac goes to sleep (work finished, time ran out,
 or a safeguard kicked in). LidOn waits up to 6 seconds for delivery before letting the Mac sleep.
 
-## Safety
+</details>
+
+<details>
+<summary><b>Safety</b></summary>
 
 - **Heat:** sleeps when macOS reports serious thermal pressure or the battery reaches 45 °C (adjustable).
 - **Battery:** sleeps at 10 % when unplugged (adjustable).
 - **Watchdog:** a separate process restores normal sleep if LidOn crashes, hangs or is force-quit, or the Mac gets critically hot — even if every safeguard is turned off. Events are logged to `~/Library/Application Support/LidOn/watchdog.log`.
 - **Never run a closed MacBook inside a bag.** Keep it on a hard, open surface, and plug it in for long jobs.
 
-## FAQ
+</details>
+
+<details>
+<summary><b>FAQ</b></summary>
 
 **How is this different from `caffeinate` or `pmset`?**
 `caffeinate` prevents idle sleep, but a MacBook still sleeps when the lid closes (unless it's on power with an external display).
@@ -161,7 +194,10 @@ It relies on an undocumented interface, so it could. Please test again after maj
 **Intel Macs?**
 Builds are universal. Intel hasn't been tested as much as Apple silicon — reports welcome.
 
-## Uninstall
+</details>
+
+<details>
+<summary><b>Uninstall</b></summary>
 
 ```bash
 brew uninstall --zap --cask lidon      # installed with Homebrew
@@ -172,7 +208,10 @@ Or use *Settings → About → Uninstall LidOn…*. Each of these also removes t
 (`/etc/sudoers.d/lidon`), agent connections, history and settings. If you just drag LidOn.app to the Trash while it's running,
 LidOn offers to clean up the rest.
 
-## Build from source
+</details>
+
+<details>
+<summary><b>Build from source</b></summary>
 
 ```bash
 swift test                          # unit tests (state machine, parsers, config merging)
@@ -183,6 +222,14 @@ ARCHS=arm64 scripts/build-app.sh    # current architecture only
 Requires Xcode 16 or later. Releases are built by GitHub Actions when a `v*` tag is pushed; `scripts/update-tap.sh <version>`
 updates the Homebrew tap.
 
-## License
+</details>
+
+<details>
+<summary><b>License</b></summary>
 
 MIT
+
+</details>
+
+
+<p align="center"><sub>Made by <a href="https://github.com/jayden0903">jayden0903</a></sub></p>
