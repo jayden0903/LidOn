@@ -20,7 +20,11 @@ struct MenuView: View {
             if !model.holds.isEmpty {
                 requestList.transition(.move(edge: .top).combined(with: .opacity))
             }
-            if let m = model.lastMessage {
+            if let warning = model.sleepControlWarning {
+                Label(warning, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(Theme.amber)
+            } else if let m = model.lastMessage {
                 Label(m, systemImage: "info.circle")
                     .font(.caption)
                     .foregroundStyle(.secondary)

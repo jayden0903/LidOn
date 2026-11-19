@@ -510,6 +510,14 @@ final class AgentSetupTests: XCTestCase {
 }
 
 final class StrongModeTests: XCTestCase {
+    func testSleepStatusRequiresAnExplicitUnambiguousValue() {
+        XCTAssertEqual(StrongMode.parseSleepDisabled("System-wide power settings:\n SleepDisabled\t\t0\n sleep 1"), false)
+        XCTAssertEqual(StrongMode.parseSleepDisabled(" SleepDisabled 1\n sleep 0"), true)
+        XCTAssertNil(StrongMode.parseSleepDisabled(" sleep 0"))
+        XCTAssertNil(StrongMode.parseSleepDisabled(" SleepDisabled 11"))
+        XCTAssertNil(StrongMode.parseSleepDisabled(" SleepDisabled 0\n SleepDisabled 1"))
+    }
+
     func testInstallScriptOnlyAllowsExactPmsetCommands() throws {
         let script = try XCTUnwrap(StrongMode.installScript(user: "jayden"))
         XCTAssertTrue(script.contains("jayden ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep 1, /usr/bin/pmset -a disablesleep 0"))
