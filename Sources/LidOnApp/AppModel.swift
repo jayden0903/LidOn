@@ -28,7 +28,10 @@ final class AppModel: ObservableObject {
     /// 에이전트/터미널 요청 (hold id → hold)
     @Published private(set) var holds: [String: Hold] = [:]
     @Published private(set) var lastMessage: String?
+    @Published private(set) var sleepControlWarning: String?
     private var lidSleepDisabled = false
+    private var checkingSleepControl = false
+    private var showingSleepWarning = false
     @Published private(set) var ipcError: String?
 
     let lid = LidControl()
@@ -125,17 +128,99 @@ final class AppModel: ObservableObject {
 
     // MARK: - 사용자 동작
 
-    func setManual(_ on: Bool, minutes: Double? = nil) {
+    @discardableResult
+    func setManual(_ on: Bool, minutes: Double? = nil) -> Bool {
+        guard !checkingSleepControl else { return false }
         let now = Date()
-        handle(engine.setManual(on, until: minutes.map { now.addingTimeInterval($0 * 60) }, now: now))
-        if on && settings.showAnimation && !engine.lidClosed {
+        if !on { return turnManualOff(now: now) }
+        var next = engine
+        let events = next.setManual(true, until: minutes.map { now.addingTimeInterval($0 * 60) }, now: now)
+        guard next.wantsLidSleepDisabled(now: now) else {
+            warnAboutFailedEnable()
+            return false
+        }
+
+        checkingSleepControl = true
+        let enabled = enableSleepControl(now: now, lidClosed: next.lidClosed, force: true)
+        checkingSleepControl = false
+        guard enabled else {
+            abandonManualEnable(now: now)
+            return false
+        }
+
+        sleepControlWarning = nil
+        engine = next
+        handle(events)
+        apply()
+        guard engine.manualOn else { return false }
+        if settings.showAnimation && !engine.lidClosed {
             overlay.show(.confirm, title: L("LidOn is on"), subtitle: L("You can close the lid — your work keeps running"),
                          autoHide: 1.6)
         }
+        return true
+    }
+
+    @discardableResult
+    func toggleManual() -> Bool { setManual(!engine.manualOn) }
+
+    private func turnManualOff(now: Date) -> Bool {
+        var next = engine
+        let events = next.setManual(false, now: now)
+        guard !next.wantsLidSleepDisabled(now: now) else {
+            warnAboutSleep(L("Another keep-awake request is active. Release it before turning off LidOn."))
+            return false
+        }
+
+        // Keep the existing state and assertions while checking macOS. Process waits may run the main loop.
+        checkingSleepControl = true
+        let strongRestored = StrongMode.restoreAndVerify(wasActive: strongActive)
+        if strongRestored { strongActive = false }
+        let lidRestored = strongRestored && (!lidSleepDisabled || lid.setLidSleepDisabled(false))
+        checkingSleepControl = false
+
+        guard lidRestored else {
+            EventLog.write("manual off could not restore sleep: pmset restored=\(strongRestored), lid restored=\(lidRestored)")
+            warnAboutSleep(L("LidOn could not confirm that macOS restored sleep. The Mac may stay awake when closed. Try turning it off again."))
+            apply()
+            return false
+        }
+
+        lidSleepDisabled = false
+        sleepControlWarning = nil
+        engine = next
+        handle(events)
+        apply()
+        return true
+    }
+
+    private func warnAboutFailedEnable(_ message: String? = nil) {
+        warnAboutSleep(message ?? L("LidOn could not confirm that macOS will stay awake with the lid closed. Try turning it on again."),
+                       title: L("Could not turn on LidOn"))
+    }
+
+    private func abandonManualEnable(now: Date) {
+        handle(engine.setManual(false, now: now))
+        warnAboutFailedEnable()
         apply()
     }
 
-    func toggleManual() { setManual(!engine.manualOn) }
+    private func warnAboutSleep(_ message: String, title: String = L("Could not turn off LidOn")) {
+        sleepControlWarning = message
+        guard !showingSleepWarning else { return }
+        showingSleepWarning = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            defer { self.showingSleepWarning = false }
+            guard let message = self.sleepControlWarning else { return }
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = title
+            alert.informativeText = message
+            alert.addButton(withTitle: L("OK"))
+            NSApp.activate(ignoringOtherApps: true)
+            alert.runModal()
+        }
+    }
 
     /// 메뉴에서 에이전트 요청을 직접 취소
     func releaseHold(id: String) { removeHold(id: id) }
@@ -233,6 +318,7 @@ final class AppModel: ObservableObject {
     }
 
     private func tick(power: PowerStatus? = nil) {
+        guard !checkingSleepControl else { return }
         let now = Date()
         let fnKey = settings.fnGesture && Self.fnKeyDown()
         var interrupted = false
@@ -263,6 +349,7 @@ final class AppModel: ObservableObject {
     }
 
     private func refresh() {
+        guard !checkingSleepControl else { return }
         checkMovedToTrash()
         // 시간이 지났거나 소유 프로세스가 사라진 요청 정리
         // (종료 알림을 못 받는 경우 — 다른 사용자의 프로세스 등 — 도 여기서 잡힌다)
@@ -275,27 +362,55 @@ final class AppModel: ObservableObject {
         tick(power: PowerReader.read())
     }
 
-    /// 커널 상태를 엔진이 원하는 값으로 맞춘다. 켜져 있는 동안에는 1초마다 다시 적용한다 (powerd가 덮어쓸 수 있으므로).
+    private func enableSleepControl(now: Date, lidClosed: Bool, force: Bool = false) -> Bool {
+        if force || !lidSleepDisabled || now.timeIntervalSince(lastAssert) >= 1 {
+            lastAssert = now
+            guard lid.hasLid, lid.setLidSleepDisabled(true) else { return false }
+            lidSleepDisabled = true
+        }
+        assertion.set(true, reason: "LidOn: keep running with the lid closed")
+        systemAssertion.set(true, reason: "LidOn: keep running with the lid closed")
+        guard assertion.isHeld else { return false }
+
+        if lidClosed && StrongMode.isInstalled && !strongActive {
+            let enabled = StrongMode.set(true)
+            EventLog.write("stronger mode on (ok=\(enabled))")
+            if !enabled {
+                StrongMode.restoreIfNeeded()
+                return false
+            }
+            strongActive = true
+        }
+        return true
+    }
+
+    /// Reapply LidOn's override on its existing cadence because powerd can overwrite it.
     private func apply() {
+        guard !checkingSleepControl else { return }
         let now = Date()
         if let until = releaseHoldUntil, now >= until { releaseHoldUntil = nil }
         let want = engine.wantsLidSleepDisabled(now: now) || releaseHoldUntil != nil
-        if want != lidSleepDisabled || (want && now.timeIntervalSince(lastAssert) >= 1) {
-            let ok = lid.setLidSleepDisabled(want)
-            if want && !ok { lastMessage = L("Could not control lid sleep on this Mac") }
-            lidSleepDisabled = want
-            lastAssert = now
+        checkingSleepControl = true
+        let enabled = !want || enableSleepControl(now: now, lidClosed: engine.lidClosed)
+        if !want || !engine.lidClosed, strongActive {
+            let restored = StrongMode.set(false)
+            strongActive = false
+            EventLog.write("stronger mode off (ok=\(restored))")
         }
-        assertion.set(want, reason: "LidOn: keep running with the lid closed")
-        systemAssertion.set(want, reason: "LidOn: keep running with the lid closed")
-        // 강력 모드: 뚜껑이 닫혀 실행 중인 동안만 macOS 잠자기 차단 스위치를 켠다
-        let strong = want && engine.lidClosed && StrongMode.isInstalled
-        if strong != strongActive {
-            // 명령을 기다리는 동안 런 루프가 돌아 apply()가 다시 불릴 수 있으므로 먼저 상태를 바꾼다
-            strongActive = strong
-            let ok = StrongMode.set(strong)
-            if strong && !ok { strongActive = false }
-            EventLog.write("stronger mode \(strong ? "on" : "off") (ok=\(ok))")
+        if !want {
+            assertion.set(false, reason: "")
+            systemAssertion.set(false, reason: "")
+            if lidSleepDisabled { _ = lid.setLidSleepDisabled(false) }
+            lidSleepDisabled = false
+        }
+        checkingSleepControl = false
+
+        if !enabled {
+            if engine.manualOn {
+                abandonManualEnable(now: now)
+                return
+            }
+            lastMessage = L("Could not control lid sleep on this Mac")
         }
         updateSealTimer(want && engine.lidClosed)
         publish()
@@ -339,7 +454,12 @@ final class AppModel: ObservableObject {
                 let r = SessionRecord(start: Date(), end: Date(), triggers: [], reason: reason,
                                       batteryStart: nil, batteryEnd: engine.power.batteryPercent,
                                       maxBatteryTemp: engine.power.batteryTempC, maxThermal: engine.power.thermal)
-                lastMessage = L("Did not keep running: %@", Fmt.reason(r))
+                let message = L("Did not keep running: %@", Fmt.reason(r))
+                lastMessage = message
+                if engine.manualOn {
+                    _ = engine.setManual(false, now: Date())
+                    warnAboutFailedEnable(message)
+                }
             case .ended(let record):
                 warnedPowerHold = false
                 EventLog.write("ended: \(record.reason.rawValue)")
@@ -400,6 +520,7 @@ final class AppModel: ObservableObject {
     }
 
     private func systemWillSleep() {
+        guard !checkingSleepControl else { return }
         // 켜져 있는데 macOS가 "뚜껑 닫힘"을 이유로 재우려 한다 = powerd가 우리 비트를 덮어쓴 경우
         // (뚜껑이 닫힌 채 충전기·디스플레이를 연결). 이 시점은 아직 다크 웨이크라 프로그램이 돌고 있다.
         // 비트를 다시 켜고 시스템 잠자기 방지(전원 연결 시 유효)를 유지하면 커널이 실제 잠자기를 거부한다.
@@ -426,13 +547,18 @@ final class AppModel: ObservableObject {
             EventLog.write("system sleeping while running: reason=\(reason ?? "?") lidDisabled=\(lidSleepDisabled) ac=\(engine.power.onAC) causesSleep=\(lid.clamshellCausesSleep.map(String.init) ?? "?")")
         }
         overlay.hide(animated: false)
+        let failedManualHold = engine.manualOn && lid.isLidClosed && reason == "Clamshell Sleep"
         handle(engine.systemWillSleep(now: Date()))
+        if failedManualHold {
+            _ = engine.setManual(false, now: Date())
+            warnAboutFailedEnable()
+        }
         apply()
     }
 
     private func applyHotkey() {
         if settings.hotkeyEnabled {
-            hotkey.register { [weak self] in MainActor.assumeIsolated { self?.toggleManual() } }
+            hotkey.register { [weak self] in MainActor.assumeIsolated { _ = self?.toggleManual() } }
         } else {
             hotkey.unregister()
         }
@@ -460,22 +586,28 @@ final class AppModel: ObservableObject {
     }
 
     func handleRequest(_ req: IPCRequest) -> IPCResponse {
+        if checkingSleepControl && req.cmd != "status" {
+            return IPCResponse(ok: false, message: "LidOn is checking the macOS sleep setting. Try again.")
+        }
         switch req.cmd {
         case "status":
             return IPCResponse(ok: true, status: snapshot)
         case "on":
-            setManual(true, minutes: req.minutes)
+            guard setManual(true, minutes: req.minutes) else {
+                return IPCResponse(ok: false, message: sleepControlWarning, status: snapshot)
+            }
             let msg = req.minutes.map { m -> String in
                 let h = Int(m) / 60, mm = Int(m.rounded()) % 60
                 return "LidOn is on for " + (h > 0 ? "\(h)h" : "") + (mm > 0 || h == 0 ? "\(mm)m" : "")
             } ?? "LidOn is on"
             return IPCResponse(ok: true, message: msg, status: snapshot)
         case "off":
-            setManual(false)
-            return IPCResponse(ok: true, message: "LidOn is off", status: snapshot)
+            let ok = setManual(false)
+            return IPCResponse(ok: ok, message: ok ? "LidOn is off" : sleepControlWarning, status: snapshot)
         case "toggle":
-            toggleManual()
-            return IPCResponse(ok: true, message: engine.manualOn ? "LidOn is on" : "LidOn is off", status: snapshot)
+            let ok = toggleManual()
+            let message = ok ? (engine.manualOn ? "LidOn is on" : "LidOn is off") : sleepControlWarning
+            return IPCResponse(ok: ok, message: message, status: snapshot)
         case "hold":
             switch addHold(id: req.id, pid: req.pid, label: req.label, minutes: req.minutes) {
             case .success(let h):

@@ -3,6 +3,7 @@
 "About" = "정보";
 "Add %@ to your PATH." = "PATH에 %@을(를) 추가하세요.";
 "Agents" = "에이전트";
+"Another keep-awake request is active. Release it before turning off LidOn." = "다른 잠자기 방지 요청이 활성화되어 있어요. LidOn을 끄기 전에 해당 요청을 해제하세요.";
 "Armed — closing the lid keeps your Mac running" = "준비됨 · 뚜껑을 닫아도 계속 실행돼요";
 "Avg. battery use" = "평균 배터리 소모";
 "Battery" = "배터리";
@@ -17,6 +18,10 @@
 "Closed" = "닫힘";
 "Command" = "명령어";
 "Could not control lid sleep on this Mac" = "이 Mac에서 뚜껑 잠자기를 제어할 수 없어요";
+"Could not turn off LidOn" = "LidOn을 끌 수 없어요";
+"Could not turn on LidOn" = "LidOn을 켤 수 없어요";
+"LidOn could not confirm that macOS restored sleep. The Mac may stay awake when closed. Try turning it off again." = "macOS의 잠자기가 복구됐는지 확인할 수 없어요. 뚜껑을 닫아도 Mac이 계속 실행될 수 있어요. 다시 꺼 보세요.";
+"LidOn could not confirm that macOS will stay awake with the lid closed. Try turning it on again." = "뚜껑을 닫아도 Mac이 계속 실행될지 확인할 수 없어요. LidOn을 다시 켜 보세요.";
 "Could not install. Run: sudo ln -sf '%@' /usr/local/bin/lidon" = "설치하지 못했어요. 터미널에서 실행하세요: sudo ln -sf '%@' /usr/local/bin/lidon";
 "Critical" = "위험";
 "Custom JSON" = "사용자 지정 JSON";

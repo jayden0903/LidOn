@@ -22,7 +22,8 @@ public enum StrongMode {
     public static func set(_ on: Bool) -> Bool {
         guard isInstalled else { return false }
         if on { FileManager.default.createFile(atPath: markerURL.path, contents: nil) }
-        let ok = run("/usr/bin/sudo", ["-n", pmset, "-a", "disablesleep", on ? "1" : "0"])
+        let didRun = run("/usr/bin/sudo", ["-n", pmset, "-a", "disablesleep", on ? "1" : "0"])
+        let ok = didRun && sleepDisabledStatus == on
         if !on && ok { try? FileManager.default.removeItem(at: markerURL) }
         return ok
     }
@@ -32,18 +33,36 @@ public enum StrongMode {
         if FileManager.default.fileExists(atPath: markerURL.path) { set(false) }
     }
 
-    /// 지금 macOS의 잠자기 차단 스위치가 켜져 있는가
-    public static var isSleepDisabled: Bool {
+    /// Only reset settings LidOn owns. A missing or unreadable status is not confirmation.
+    public static func restoreAndVerify(wasActive: Bool) -> Bool {
+        if wasActive || FileManager.default.fileExists(atPath: markerURL.path) { return set(false) }
+        return sleepDisabledStatus == false
+    }
+
+    private static var sleepDisabledStatus: Bool? {
         let p = Process()
         let out = Pipe()
         p.executableURL = URL(fileURLWithPath: pmset)
         p.arguments = ["-g"]
         p.standardOutput = out
         p.standardError = FileHandle.nullDevice
-        guard (try? p.run()) != nil else { return false }
+        guard (try? p.run()) != nil else { return nil }
         let text = String(decoding: out.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
         p.waitUntilExit()
-        return text.split(separator: "\n").contains { $0.contains("SleepDisabled") && $0.hasSuffix("1") }
+        guard p.terminationStatus == 0 else { return nil }
+        return parseSleepDisabled(text)
+    }
+
+    static func parseSleepDisabled(_ text: String) -> Bool? {
+        let settings = text.split(separator: "\n")
+            .map { $0.split(whereSeparator: \.isWhitespace) }
+            .filter { $0.first == "SleepDisabled" }
+        guard settings.count == 1, let setting = settings.first, setting.count == 2 else { return nil }
+        switch setting[1] {
+        case "0": return false
+        case "1": return true
+        default: return nil
+        }
     }
 
     /// 관리자 권한으로 실행할 설치 스크립트: 문법을 검사한 뒤 root 소유 0440으로 넣는다
